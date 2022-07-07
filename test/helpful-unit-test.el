@@ -525,6 +525,10 @@ buffers lying around."
     "function"))
   (should
    (equal
+    (helpful--kind-name 'file-missing nil)
+    "unbound symbol"))
+  (should
+   (equal
     (helpful--kind-name 'save-excursion t)
     "special form")))
 

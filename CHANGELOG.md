@@ -11,6 +11,9 @@ Fixed support for Emacs 29.
 
 Added support for storing org-mode links from inside Helpful buffers.
 
+Added support for viewing help for symbols not bound as variables or
+functions.
+
 # v0.19 (released 12th May 2022)
 
 Fixed a hang when looking at functions that had advice but hadn't yet
