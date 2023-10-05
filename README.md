@@ -5,6 +5,20 @@ much more contextual information.
 
 ![screenshot](screenshots/helpful.png)
 
+NOTE: This fork includes the following pull-requests from the original repository:
+https://github.com/Wilfred/helpful/pull/311,
+https://github.com/Wilfred/helpful/pull/217,
+https://github.com/Wilfred/helpful/pull/195,
+https://github.com/Wilfred/helpful/pull/313,
+https://github.com/Wilfred/helpful/pull/299.
+
+It is best installed with `package-vc`:
+
+``` emacs-lisp
+(package-vc-install
+ '(helpful . (:url "https://github.com/slotThe/helpful")))
+```
+
 ## Usage
 
 Install from MELPA, then call one of the following commands:
