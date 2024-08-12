@@ -98,6 +98,12 @@ To disable cleanup entirely, set this variable to nil. See also
   :type 'function
   :group 'helpful)
 
+(defcustom helpful-set-variable-function
+  (if (< 29 emacs-major-version) #'setopt #'setq)
+  "Function used by `helpful--set' to interactively set variables."
+  :type 'function
+  :group 'helpful)
+
 (defcustom helpful-hide-docstring-in-source nil
   "If t, hide the the docstring source code header.
 
@@ -165,7 +171,7 @@ can make Helpful very slow.")
       (setq helpful--start-buffer current-buffer)
       (setq helpful--associated-buffer current-buffer)
       (setq list-buffers-directory
-        (if (symbolp symbol) (format "%s: %s" (helpful--kind-name symbol callable-p) symbol) "lambda"))
+            (if (symbolp symbol) (format "%s: %s" (helpful--kind-name symbol callable-p) symbol) "lambda"))
       (if (helpful--primitive-p symbol callable-p)
           (setq-local comment-start "//")
         (setq-local comment-start ";")))
@@ -589,24 +595,24 @@ This is largely equivalent to `read-buffer', but counsel.el
 overrides that to include previously opened buffers."
   (let* ((names (-map #'buffer-name (buffer-list)))
          (default
-           (cond
-            ;; If we're already looking at a buffer-local value, start
-            ;; the prompt from the relevant buffer.
-            ((and helpful--associated-buffer
-                  (buffer-live-p helpful--associated-buffer))
-             (buffer-name helpful--associated-buffer))
-            ;; If we're looking at the global value, offer the initial
-            ;; buffer.
-            ((and helpful--start-buffer
-                  (buffer-live-p helpful--start-buffer))
-             (buffer-name helpful--start-buffer))
-            ;; If we're looking at the global value and have no initial
-            ;; buffer, choose the first normal buffer.
-            (t
-             (--first (and (not (s-starts-with-p " " it))
-                           (not (s-starts-with-p "*" it)))
-                      names))
-            )))
+          (cond
+           ;; If we're already looking at a buffer-local value, start
+           ;; the prompt from the relevant buffer.
+           ((and helpful--associated-buffer
+                 (buffer-live-p helpful--associated-buffer))
+            (buffer-name helpful--associated-buffer))
+           ;; If we're looking at the global value, offer the initial
+           ;; buffer.
+           ((and helpful--start-buffer
+                 (buffer-live-p helpful--start-buffer))
+            (buffer-name helpful--start-buffer))
+           ;; If we're looking at the global value and have no initial
+           ;; buffer, choose the first normal buffer.
+           (t
+            (--first (and (not (s-starts-with-p " " it))
+                          (not (s-starts-with-p "*" it)))
+                     names))
+           )))
     (get-buffer
      (completing-read
       prompt
@@ -661,6 +667,7 @@ overrides that to include previously opened buffers."
   (let* ((sym (button-get button 'symbol))
          (buf (button-get button 'buffer))
          (sym-value (helpful--sym-value sym buf))
+         (set-func (symbol-name helpful-set-variable-function))
          ;; Inspired by `counsel-read-setq-expression'.
          (expr
           (minibuffer-with-setup-hook
@@ -669,7 +676,7 @@ overrides that to include previously opened buffers."
                               #'elisp-eldoc-documentation-function)
                 (run-hooks 'eval-expression-minibuffer-setup-hook)
                 (goto-char (minibuffer-prompt-end))
-                (forward-char (length (format "(setq %S " sym))))
+                (forward-char (length (format "(%s %S " set-func sym))))
             (read-from-minibuffer
              "Eval: "
              (format
@@ -677,9 +684,9 @@ overrides that to include previously opened buffers."
                       (and (symbolp sym-value)
                            (not (null sym-value))
                            (not (keywordp sym-value))))
-                  "(setq %s '%S)"
-                "(setq %s %S)")
-              sym sym-value)
+                  "(%s %s '%S)"
+                "(%s %s %S)")
+              set-func sym sym-value)
              read-expression-map t
              'read-expression-history))))
     (save-current-buffer
@@ -1339,7 +1346,10 @@ If the source code cannot be found, return the sexp used."
                   ;; function.
                   (progn
                     (setq pos (line-beginning-position))
-                    (forward-list)
+                    ;; HACK Use the elisp syntax table even though the file is a
+                    ;; C file. This is a temporary workaround for issue #329.
+                    (with-syntax-table emacs-lisp-mode-syntax-table
+                      (forward-list))
                     (forward-char)
                     (narrow-to-region pos (point)))
                 ;; Narrow to the top-level definition.
@@ -2007,8 +2017,8 @@ OBJ may be a symbol or a compiled function object."
     (setq file-name (s-chop-suffix ".gz" file-name))
     (condition-case nil
         (help-fns--autoloaded-p sym file-name)
-      ; new in Emacs 29.0.50
-      ; see https://github.com/Wilfred/helpful/pull/283
+                                        ; new in Emacs 29.0.50
+                                        ; see https://github.com/Wilfred/helpful/pull/283
       (error (help-fns--autoloaded-p sym)))))
 
 (defun helpful--compiled-p (sym)
@@ -2136,22 +2146,22 @@ OBJ may be a symbol or a compiled function object."
             ((helpful--kbd-macro-p sym) keyboard-macro-button)
             (t "function")))
           (defined
-            (cond
-             (buf
-              (let ((path (buffer-file-name buf)))
-                (if path
-                    (format
-                     "defined in %s"
-                     (helpful--navigate-button
-                      (file-name-nondirectory path) path pos))
-                  (format "defined in buffer %s"
-                          (helpful--buffer-button buf pos)))))
-             (primitive-p
-              "defined in C source code")
-             ((helpful--kbd-macro-p sym) nil)
-             (unbound-p nil)
-             (t
-              "without a source file"))))
+           (cond
+            (buf
+             (let ((path (buffer-file-name buf)))
+               (if path
+                   (format
+                    "defined in %s"
+                    (helpful--navigate-button
+                     (file-name-nondirectory path) path pos))
+                 (format "defined in buffer %s"
+                         (helpful--buffer-button buf pos)))))
+            (primitive-p
+             "defined in C source code")
+            ((helpful--kbd-macro-p sym) nil)
+            (unbound-p nil)
+            (t
+             "without a source file"))))
 
     (s-word-wrap
      70
@@ -2881,7 +2891,7 @@ See also `helpful-function'."
      ((null sym)
       (user-error "No command is bound to %s"
                   (key-description key-sequence)))
-     ((commandp sym)
+     ((commandp sym t)
       (helpful--update-and-switch-buffer sym t))
      (t
       (user-error "%s is bound to %s which is not a command"
